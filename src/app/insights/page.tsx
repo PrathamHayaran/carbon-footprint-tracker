@@ -1,17 +1,15 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { BENCHMARKS } from '@/lib/emissionFactors';
+import { CATEGORY_MAP } from '@/lib/constants';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import TrendChart from '@/components/TrendChart';
+import { useInsights } from '@/hooks/useInsights';
 
-const COLORS = {
-  transport: 'hsl(212,80%,60%)',
-  food:      'hsl(150,60%,50%)',
-  energy:    'hsl(38,92%,58%)',
-  shopping:  'hsl(280,70%,65%)',
-  offset:    'hsl(175,72%,45%)',
-};
+// ---------------------------------------------------------------------------
+// Static tips data
+// ---------------------------------------------------------------------------
 
 const TIPS = [
   {
@@ -88,6 +86,10 @@ const TIPS = [
   },
 ];
 
+// ---------------------------------------------------------------------------
+// Small presentational sub-components
+// ---------------------------------------------------------------------------
+
 function ImpactBadge({ impact }: { impact: 'low' | 'medium' | 'high' }) {
   const map = {
     low:    { color: 'var(--green-300)',  bg: 'hsla(150,60%,30%,0.25)', label: 'Low Impact' },
@@ -102,47 +104,52 @@ function ImpactBadge({ impact }: { impact: 'low' | 'medium' | 'high' }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
 export default function InsightsPage() {
-  const { getDailyLogs, weeklyEmissions, monthlyEmissions } = useApp();
   const [period, setPeriod] = useState<'week' | 'month'>('week');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiTip, setAiTip] = useState<string | null>(null);
 
-  const logs = getDailyLogs(period === 'week' ? 7 : 30);
-  const totalEmission = logs.reduce((s, l) => s + l.totalEmission, 0);
-  const avgDaily = totalEmission / logs.length;
-  const predictedAnnual = Math.round(avgDaily * 365);
+  const {
+    totalEmission,
+    avgDaily,
+    predictedAnnual,
+    catBreakdown,
+    topCategory,
+    benchmarks,
+    weeklyEmissions,
+    monthlyEmissions,
+  } = useInsights(period);
 
-  const catBreakdown = useMemo(() => {
-    const totals: Record<string, number> = {};
-    logs.forEach(l => l.activities.forEach(a => {
-      if (a.emission > 0) totals[a.category] = (totals[a.category] || 0) + a.emission;
-    }));
-    return Object.entries(totals)
-      .map(([cat, val]) => ({ name: cat, value: Math.round(val * 100) / 100, color: COLORS[cat as keyof typeof COLORS] || '#888' }))
-      .sort((a, b) => b.value - a.value);
-  }, [logs]);
-
-  const vsIndia = ((avgDaily - BENCHMARKS.india_daily) / BENCHMARKS.india_daily * 100).toFixed(0);
-  const vsGlobal = ((avgDaily - BENCHMARKS.global_daily) / BENCHMARKS.global_daily * 100).toFixed(0);
-  const vsParis = ((predictedAnnual - BENCHMARKS.paris_target_annual) / BENCHMARKS.paris_target_annual * 100).toFixed(0);
-
-  const topCat = catBreakdown[0]?.name || 'transport';
+  // Personalise tips: surface the top category's tips first
   const relevantTips = [...TIPS].sort((a, b) => {
-    if (a.category === topCat && b.category !== topCat) return -1;
-    if (b.category === topCat && a.category !== topCat) return 1;
+    if (a.category === topCategory && b.category !== topCategory) return -1;
+    if (b.category === topCategory && a.category !== topCategory) return 1;
     return b.savingKg - a.savingKg;
   });
 
+  // Benchmark percentage strings for AI insight text
+  const vsIndiaPct = (
+    ((avgDaily - BENCHMARKS.india_daily) / BENCHMARKS.india_daily) * 100
+  ).toFixed(0);
+  const vsParisPct = (
+    ((predictedAnnual - BENCHMARKS.paris_target_annual) / BENCHMARKS.paris_target_annual) * 100
+  ).toFixed(0);
+
   const generateAiInsight = async () => {
     setAiLoading(true);
-    // Simulated AI insight (in production: calls /api/insights/generate with Vertex AI)
-    await new Promise(r => setTimeout(r, 2000));
+    // Simulated AI insight (production: call /api/insights/generate with Vertex AI)
+    await new Promise<void>((r) => setTimeout(r, 2000));
+
     const insights = [
-      `Based on your ${period}ly data, your biggest opportunity is in **${topCat}**. You're averaging ${avgDaily.toFixed(1)} kg CO₂e/day — ${Math.abs(Number(vsIndia))}% ${Number(vsIndia) > 0 ? 'above' : 'below'} India's average. If you continue at this rate, your annual footprint will be ~${predictedAnnual} kg. **Top action: ${relevantTips[0].title}** — this single change could save you up to ${relevantTips[0].savingKg} kg/year.`,
-      `Your data shows strong patterns. ${catBreakdown.length > 0 ? `${catBreakdown[0].name} accounts for ${Math.round(catBreakdown[0].value / totalEmission * 100)}% of your emissions.` : ''} The easiest quick win: **${relevantTips[1]?.title || 'track your transport more carefully'}**. At ${predictedAnnual} kg/year predicted, you're ${Number(vsParis) > 0 ? `${vsParis}% above` : `${Math.abs(Number(vsParis))}% below`} the Paris Agreement 2-tonne target.`,
+      `Based on your ${period}ly data, your biggest opportunity is in **${topCategory ?? 'transport'}**. You're averaging ${avgDaily.toFixed(1)} kg CO₂e/day — ${Math.abs(Number(vsIndiaPct))}% ${Number(vsIndiaPct) > 0 ? 'above' : 'below'} India's average. If you continue at this rate, your annual footprint will be ~${predictedAnnual} kg. **Top action: ${relevantTips[0]?.title ?? 'reduce transport'}** — this single change could save you up to ${relevantTips[0]?.savingKg ?? 0} kg/year.`,
+      `Your data shows strong patterns. ${catBreakdown.length > 0 ? `${catBreakdown[0]?.name} accounts for ${Math.round((catBreakdown[0]?.value ?? 0) / totalEmission * 100)}% of your emissions.` : ''} The easiest quick win: **${relevantTips[1]?.title ?? 'track your transport more carefully'}**. At ${predictedAnnual} kg/year predicted, you're ${Number(vsParisPct) > 0 ? `${vsParisPct}% above` : `${Math.abs(Number(vsParisPct))}% below`} the Paris Agreement 2-tonne target.`,
     ];
-    setAiTip(insights[Math.floor(Math.random() * insights.length)]);
+
+    setAiTip(insights[Math.floor(Math.random() * insights.length)] ?? null);
     setAiLoading(false);
   };
 
@@ -175,10 +182,10 @@ export default function InsightsPage() {
         {/* Stats overview */}
         <div className="grid-4 animate-fadeInUp delay-100" style={{ marginBottom: '1.5rem' }}>
           {[
-            { label: 'Total Emission', value: totalEmission.toFixed(1), unit: 'kg CO₂e', icon: '📊', color: 'var(--text-primary)' },
-            { label: 'Daily Average', value: avgDaily.toFixed(2), unit: 'kg/day', icon: '📅', color: avgDaily < BENCHMARKS.india_daily ? 'var(--green-300)' : 'var(--amber-400)' },
-            { label: 'Predicted Annual', value: (predictedAnnual / 1000).toFixed(2), unit: 'tonnes/yr', icon: '📈', color: predictedAnnual < BENCHMARKS.paris_target_annual ? 'var(--green-300)' : 'var(--red-400)' },
-            { label: 'vs Paris Target', value: (Number(vsParis) > 0 ? '+' : '') + vsParis, unit: '%', icon: '🎯', color: Number(vsParis) < 0 ? 'var(--green-300)' : 'var(--red-400)' },
+            { label: 'Total Emission',   value: totalEmission.toFixed(1),                unit: 'kg CO₂e',    icon: '📊', color: 'var(--text-primary)' },
+            { label: 'Daily Average',    value: avgDaily.toFixed(2),                     unit: 'kg/day',     icon: '📅', color: avgDaily < BENCHMARKS.india_daily ? 'var(--green-300)' : 'var(--amber-400)' },
+            { label: 'Predicted Annual', value: (predictedAnnual / 1000).toFixed(2),     unit: 'tonnes/yr',  icon: '📈', color: predictedAnnual < BENCHMARKS.paris_target_annual ? 'var(--green-300)' : 'var(--red-400)' },
+            { label: 'vs Paris Target',  value: (Number(vsParisPct) > 0 ? '+' : '') + vsParisPct, unit: '%', icon: '🎯', color: Number(vsParisPct) < 0 ? 'var(--green-300)' : 'var(--red-400)' },
           ].map(stat => (
             <div key={stat.label} className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
@@ -248,22 +255,18 @@ export default function InsightsPage() {
         <div className="card animate-fadeInUp delay-300" style={{ marginBottom: '1.5rem' }}>
           <h3 style={{ marginBottom: '1.25rem' }}>🌏 How You Compare</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem' }}>
-            {[
-              { label: 'India Average', daily: BENCHMARKS.india_daily, annual: BENCHMARKS.india_annual, icon: '🇮🇳', diff: vsIndia },
-              { label: 'Global Average', daily: BENCHMARKS.global_daily, annual: BENCHMARKS.global_annual, icon: '🌍', diff: vsGlobal },
-              { label: 'Paris 2°C Target', daily: (BENCHMARKS.paris_target_annual / 365), annual: BENCHMARKS.paris_target_annual, icon: '🎯', diff: vsParis },
-            ].map(bench => (
+            {benchmarks.map(bench => (
               <div key={bench.label} style={{ textAlign: 'center' }}>
                 <span style={{ fontSize: '2rem' }}>{bench.icon}</span>
                 <p style={{ fontWeight: 600, marginTop: '0.5rem', marginBottom: '0.25rem' }}>{bench.label}</p>
                 <p className="text-sm text-muted">{bench.daily.toFixed(1)} kg/day · {bench.annual} kg/yr</p>
                 <p style={{
                   marginTop: '0.75rem', fontFamily: 'JetBrains Mono, monospace', fontSize: '1.3rem', fontWeight: 700,
-                  color: Number(bench.diff) < 0 ? 'var(--green-300)' : 'var(--red-400)',
+                  color: bench.diffPercent < 0 ? 'var(--green-300)' : 'var(--red-400)',
                 }}>
-                  {Number(bench.diff) > 0 ? '+' : ''}{bench.diff}%
+                  {bench.diffPercent > 0 ? '+' : ''}{bench.diffPercent.toFixed(0)}%
                 </p>
-                <p className="text-xs text-muted">{Number(bench.diff) < 0 ? '✅ Below' : '⚠️ Above'} benchmark</p>
+                <p className="text-xs text-muted">{bench.diffPercent < 0 ? '✅ Below' : '⚠️ Above'} benchmark</p>
               </div>
             ))}
           </div>
@@ -317,7 +320,7 @@ export default function InsightsPage() {
           </div>
           <div className="grid-2">
             {relevantTips.slice(0, 6).map((tip, i) => (
-              <div key={i} className="card" style={{ borderLeft: `3px solid ${COLORS[tip.category as keyof typeof COLORS] || 'var(--border)'}` }}>
+              <div key={i} className="card" style={{ borderLeft: `3px solid ${CATEGORY_MAP[tip.category as keyof typeof CATEGORY_MAP]?.color ?? 'var(--border)'}` }}>
                 <div style={{ display: 'flex', gap: '0.875rem', alignItems: 'flex-start' }}>
                   <span style={{ fontSize: '2rem', flexShrink: 0 }}>{tip.icon}</span>
                   <div style={{ flex: 1 }}>

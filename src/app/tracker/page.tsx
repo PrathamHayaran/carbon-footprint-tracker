@@ -1,80 +1,26 @@
 'use client';
-import { useState, useEffect, Suspense } from 'react';
+import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useApp } from '@/context/AppContext';
-import { EMISSION_FACTORS, calculateEmission } from '@/lib/emissionFactors';
-import { Activity } from '@/types';
-
-type Category = 'transport' | 'food' | 'energy' | 'shopping' | 'offset';
-
-const CATEGORIES: { key: Category; label: string; icon: string; color: string }[] = [
-  { key: 'transport', label: 'Transport', icon: '🚗', color: 'hsl(212,80%,60%)' },
-  { key: 'food',      label: 'Food',      icon: '🍽️', color: 'hsl(150,60%,50%)' },
-  { key: 'energy',    label: 'Energy',    icon: '⚡', color: 'hsl(38,92%,58%)' },
-  { key: 'shopping',  label: 'Shopping',  icon: '🛍️', color: 'hsl(280,70%,65%)' },
-  { key: 'offset',    label: 'Offsets',   icon: '♻️', color: 'hsl(175,72%,45%)' },
-];
+import { EMISSION_FACTORS } from '@/lib/emissionFactors';
+import { CATEGORY_CONFIG, CategoryKey } from '@/lib/constants';
+import { useActivityForm } from '@/hooks/useActivityForm';
 
 function TrackerContent() {
   const searchParams = useSearchParams();
-  const initialCat = (searchParams.get('cat') as Category) || 'transport';
-  const [activeCategory, setActiveCategory] = useState<Category>(initialCat);
-  const [activityType, setActivityType] = useState('');
-  const [quantity, setQuantity] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [note, setNote] = useState('');
-  const [preview, setPreview] = useState(0);
-  const [toast, setToast] = useState<string | null>(null);
+  const initialCat = (searchParams.get('cat') as CategoryKey) || 'transport';
+  const { activities, deleteActivity, getDailyLogs } = useApp();
 
-  const { addActivity, activities, deleteActivity, getDailyLogs } = useApp();
+  const form = useActivityForm(initialCat);
 
-  const catFactors = EMISSION_FACTORS[activeCategory] as Record<string, { factor: number; unit: string; label: string }>;
+  const catFactors = EMISSION_FACTORS[form.activeCategory] as Record<
+    string,
+    { factor: number; unit: string; label: string }
+  >;
   const activityKeys = Object.keys(catFactors);
-
-  useEffect(() => {
-    setActivityType(activityKeys[0] || '');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCategory]);
-
-  useEffect(() => {
-    if (activityType && quantity) {
-      setPreview(calculateEmission(activeCategory, activityType, Number(quantity)));
-    } else {
-      setPreview(0);
-    }
-  }, [activityType, quantity, activeCategory]);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!activityType || !quantity || Number(quantity) <= 0) return;
-
-    const factor = catFactors[activityType];
-    const emission = calculateEmission(activeCategory, activityType, Number(quantity));
-
-    addActivity({
-      category: activeCategory,
-      activityType,
-      quantity: Number(quantity),
-      unit: factor.unit,
-      emission,
-      label: factor.label,
-      date,
-      note,
-    });
-
-    setQuantity('');
-    setNote('');
-    setPreview(0);
-    setToast(`✅ Logged ${factor.label} — ${Math.abs(emission).toFixed(2)} kg CO₂e`);
-    setTimeout(() => setToast(null), 3500);
-  };
 
   const todayLogs = getDailyLogs(1)[0]?.activities ?? [];
   const recentActivities = activities.slice(0, 20);
-
-  const previewColor = preview < 0
-    ? 'var(--green-300)'
-    : preview < 2 ? 'var(--green-300)' : preview < 5 ? 'var(--amber-400)' : 'var(--red-400)';
 
   return (
     <div className="page">
@@ -97,12 +43,12 @@ function TrackerContent() {
 
             {/* Category tabs */}
             <div className="tabs" style={{ marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-              {CATEGORIES.map(cat => (
+              {CATEGORY_CONFIG.map(cat => (
                 <button
                   key={cat.key}
                   id={`tab-${cat.key}`}
-                  className={`tab ${activeCategory === cat.key ? 'active' : ''}`}
-                  onClick={() => setActiveCategory(cat.key)}
+                  className={`tab ${form.activeCategory === cat.key ? 'active' : ''}`}
+                  onClick={() => form.setActiveCategory(cat.key)}
                   style={{ flex: 'unset', padding: '0.5rem 0.75rem' }}
                 >
                   <span>{cat.icon}</span>
@@ -111,7 +57,7 @@ function TrackerContent() {
               ))}
             </div>
 
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <form onSubmit={form.handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {/* Activity Type */}
               <div>
                 <label className="label" htmlFor="activity-type">Activity Type</label>
@@ -119,22 +65,22 @@ function TrackerContent() {
                   <select
                     id="activity-type"
                     className="select"
-                    value={activityType}
-                    onChange={e => setActivityType(e.target.value)}
+                    value={form.activityType}
+                    onChange={e => form.setActivityType(e.target.value)}
                   >
                     {activityKeys.map(key => (
-                      <option key={key} value={key}>{catFactors[key].label}</option>
+                      <option key={key} value={key}>{catFactors[key]?.label}</option>
                     ))}
                   </select>
                   <span style={{ position: 'absolute', right: '0.875rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-muted)' }}>▾</span>
                 </div>
               </div>
 
-              {/* Quantity */}
+              {/* Quantity + Date */}
               <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.75rem' }}>
                 <div>
                   <label className="label" htmlFor="quantity">
-                    Quantity ({activityType ? catFactors[activityType]?.unit : '—'})
+                    Quantity ({form.activityType ? (catFactors[form.activityType]?.unit ?? '—') : '—'})
                   </label>
                   <input
                     id="quantity"
@@ -142,10 +88,11 @@ function TrackerContent() {
                     min="0"
                     step="any"
                     className="input"
-                    placeholder={`Enter ${activityType ? catFactors[activityType]?.unit : 'amount'}`}
-                    value={quantity}
-                    onChange={e => setQuantity(e.target.value)}
+                    placeholder={`Enter ${form.activityType ? (catFactors[form.activityType]?.unit ?? 'amount') : 'amount'}`}
+                    value={form.quantity}
+                    onChange={e => form.setQuantity(e.target.value)}
                     required
+                    aria-describedby={form.validationError ? 'form-error' : undefined}
                   />
                 </div>
                 <div>
@@ -154,8 +101,8 @@ function TrackerContent() {
                     id="log-date"
                     type="date"
                     className="input"
-                    value={date}
-                    onChange={e => setDate(e.target.value)}
+                    value={form.date}
+                    onChange={e => form.setDate(e.target.value)}
                     max={new Date().toISOString().split('T')[0]}
                   />
                 </div>
@@ -169,16 +116,23 @@ function TrackerContent() {
                   type="text"
                   className="input"
                   placeholder="e.g. Morning commute..."
-                  value={note}
-                  onChange={e => setNote(e.target.value)}
+                  value={form.note}
+                  onChange={e => form.setNote(e.target.value)}
                 />
               </div>
 
-              {/* Preview */}
-              {preview !== 0 && (
+              {/* Validation error */}
+              {form.validationError && (
+                <p id="form-error" role="alert" style={{ color: 'var(--red-400)', fontSize: '0.85rem' }}>
+                  ⚠️ {form.validationError}
+                </p>
+              )}
+
+              {/* Emission preview */}
+              {form.preview !== 0 && (
                 <div style={{
                   background: 'var(--bg-card-2)',
-                  border: `1px solid ${previewColor}40`,
+                  border: `1px solid ${form.previewColor}40`,
                   borderRadius: 'var(--radius-md)',
                   padding: '1rem',
                   display: 'flex',
@@ -188,14 +142,14 @@ function TrackerContent() {
                 }}>
                   <div>
                     <p className="text-xs text-muted">Carbon Emission Preview</p>
-                    <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '1.5rem', fontWeight: 700, color: previewColor, lineHeight: 1, marginTop: '0.25rem' }}>
-                      {preview < 0 ? '−' : '+'}{Math.abs(preview).toFixed(2)} kg CO₂e
+                    <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '1.5rem', fontWeight: 700, color: form.previewColor, lineHeight: 1, marginTop: '0.25rem' }}>
+                      {form.preview < 0 ? '−' : '+'}{Math.abs(form.preview).toFixed(2)} kg CO₂e
                     </p>
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <p className="text-xs text-muted">Equivalent to</p>
                     <p className="text-sm" style={{ marginTop: '0.2rem', fontWeight: 500 }}>
-                      {Math.abs(preview / 0.21).toFixed(0)} km petrol drive
+                      {Math.abs(form.preview / 0.21).toFixed(0)} km petrol drive
                     </p>
                   </div>
                 </div>
@@ -231,14 +185,18 @@ function TrackerContent() {
             <div className="card animate-fadeInUp delay-300">
               <h4 style={{ marginBottom: '0.875rem' }}>📚 Emission Factors</h4>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '200px', overflowY: 'auto' }}>
-                {activityKeys.map(key => (
-                  <div key={key} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.4rem 0', borderBottom: '1px solid var(--border)', fontSize: '0.8rem' }}>
-                    <span style={{ color: 'var(--text-secondary)' }}>{catFactors[key].label}</span>
-                    <span className="mono" style={{ color: 'var(--green-300)', fontWeight: 600 }}>
-                      {catFactors[key].factor > 0 ? '' : '−'}{Math.abs(catFactors[key].factor)} kg/{catFactors[key].unit}
-                    </span>
-                  </div>
-                ))}
+                {activityKeys.map(key => {
+                  const f = catFactors[key];
+                  if (!f) return null;
+                  return (
+                    <div key={key} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.4rem 0', borderBottom: '1px solid var(--border)', fontSize: '0.8rem' }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>{f.label}</span>
+                      <span className="mono" style={{ color: 'var(--green-300)', fontWeight: 600 }}>
+                        {f.factor > 0 ? '' : '−'}{Math.abs(f.factor)} kg/{f.unit}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -265,7 +223,8 @@ function TrackerContent() {
                         <button
                           onClick={() => deleteActivity(act.id)}
                           style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem', padding: '0.2rem', borderRadius: '4px', lineHeight: 1 }}
-                          title="Delete"
+                          title="Delete activity"
+                          aria-label={`Delete ${act.label}`}
                         >
                           ✕
                         </button>
@@ -280,10 +239,10 @@ function TrackerContent() {
       </div>
 
       {/* Toast notification */}
-      {toast && (
-        <div className="toast" id="activity-toast">
+      {form.toast && (
+        <div className="toast" id="activity-toast" role="status" aria-live="polite">
           <span style={{ fontSize: '1.25rem' }}>🌱</span>
-          <p style={{ fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-primary)' }}>{toast}</p>
+          <p style={{ fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-primary)' }}>{form.toast}</p>
         </div>
       )}
     </div>

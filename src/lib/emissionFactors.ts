@@ -1,5 +1,21 @@
-// Emission factors in kg CO2e per unit
-// Sources: IPCC AR6, EPA, DEFRA 2023
+/**
+ * @file emissionFactors.ts
+ * Emission factors in kg CO₂e per unit.
+ *
+ * Sources:
+ *  - IPCC AR6 (2021)
+ *  - US EPA GHG Emission Factors Hub (2023)
+ *  - DEFRA UK Government GHG Conversion Factors (2023)
+ *  - Our World in Data — Food & Land Use data
+ *
+ * All `factor` values are in **kg CO₂ equivalent per unit** (e.g. per km, per
+ * kg of food consumed, per kWh of electricity).  Negative factors represent
+ * carbon sequestration (offsets).
+ */
+
+// ---------------------------------------------------------------------------
+// Emission factor registry
+// ---------------------------------------------------------------------------
 
 export const EMISSION_FACTORS = {
   transport: {
@@ -15,28 +31,28 @@ export const EMISSION_FACTORS = {
     bicycle:       { factor: 0,     unit: 'km',    label: 'Bicycle / Walk' },
   },
   food: {
-    beef:          { factor: 27.0,  unit: 'kg',    label: 'Beef' },
-    lamb:          { factor: 24.5,  unit: 'kg',    label: 'Lamb / Mutton' },
-    pork:          { factor: 7.6,   unit: 'kg',    label: 'Pork' },
-    chicken:       { factor: 6.9,   unit: 'kg',    label: 'Chicken' },
-    fish:          { factor: 3.0,   unit: 'kg',    label: 'Fish / Seafood' },
-    eggs:          { factor: 4.5,   unit: 'dozen', label: 'Eggs (dozen)' },
-    dairy:         { factor: 3.2,   unit: 'liter', label: 'Dairy / Milk' },
-    vegetables:    { factor: 0.5,   unit: 'kg',    label: 'Vegetables' },
-    vegan_meal:    { factor: 0.9,   unit: 'meal',  label: 'Vegan Meal' },
-    vegetarian_meal: { factor: 1.5, unit: 'meal',  label: 'Vegetarian Meal' },
-    meat_meal:     { factor: 4.0,   unit: 'meal',  label: 'Non-Veg Meal' },
-    food_waste:    { factor: 2.5,   unit: 'kg',    label: 'Food Waste' },
+    beef:              { factor: 27.0, unit: 'kg',    label: 'Beef' },
+    lamb:              { factor: 24.5, unit: 'kg',    label: 'Lamb / Mutton' },
+    pork:              { factor: 7.6,  unit: 'kg',    label: 'Pork' },
+    chicken:           { factor: 6.9,  unit: 'kg',    label: 'Chicken' },
+    fish:              { factor: 3.0,  unit: 'kg',    label: 'Fish / Seafood' },
+    eggs:              { factor: 4.5,  unit: 'dozen', label: 'Eggs (dozen)' },
+    dairy:             { factor: 3.2,  unit: 'liter', label: 'Dairy / Milk' },
+    vegetables:        { factor: 0.5,  unit: 'kg',    label: 'Vegetables' },
+    vegan_meal:        { factor: 0.9,  unit: 'meal',  label: 'Vegan Meal' },
+    vegetarian_meal:   { factor: 1.5,  unit: 'meal',  label: 'Vegetarian Meal' },
+    meat_meal:         { factor: 4.0,  unit: 'meal',  label: 'Non-Veg Meal' },
+    food_waste:        { factor: 2.5,  unit: 'kg',    label: 'Food Waste' },
   },
   energy: {
-    electricity_in:  { factor: 0.82,  unit: 'kWh',    label: 'Electricity (India)' },
-    electricity_us:  { factor: 0.386, unit: 'kWh',    label: 'Electricity (US)' },
-    electricity_eu:  { factor: 0.276, unit: 'kWh',    label: 'Electricity (EU)' },
-    electricity_uk:  { factor: 0.233, unit: 'kWh',    label: 'Electricity (UK)' },
-    natural_gas:     { factor: 0.202, unit: 'kWh',    label: 'Natural Gas' },
-    lpg:             { factor: 1.51,  unit: 'liter',  label: 'LPG / Cylinder' },
-    diesel_gen:      { factor: 2.68,  unit: 'liter',  label: 'Diesel Generator' },
-    solar:           { factor: 0.05,  unit: 'kWh',    label: 'Solar (lifecycle)' },
+    electricity_in:  { factor: 0.82,  unit: 'kWh',   label: 'Electricity (India)' },
+    electricity_us:  { factor: 0.386, unit: 'kWh',   label: 'Electricity (US)' },
+    electricity_eu:  { factor: 0.276, unit: 'kWh',   label: 'Electricity (EU)' },
+    electricity_uk:  { factor: 0.233, unit: 'kWh',   label: 'Electricity (UK)' },
+    natural_gas:     { factor: 0.202, unit: 'kWh',   label: 'Natural Gas' },
+    lpg:             { factor: 1.51,  unit: 'liter', label: 'LPG / Cylinder' },
+    diesel_gen:      { factor: 2.68,  unit: 'liter', label: 'Diesel Generator' },
+    solar:           { factor: 0.05,  unit: 'kWh',   label: 'Solar (lifecycle)' },
   },
   shopping: {
     clothing:        { factor: 10.0,  unit: 'item',   label: 'Clothing Item' },
@@ -48,32 +64,89 @@ export const EMISSION_FACTORS = {
     plastic_bag:     { factor: 0.002, unit: 'bag',    label: 'Plastic Bag' },
   },
   offset: {
-    tree_planted:    { factor: -21.0, unit: 'tree',   label: 'Tree Planted (annual)' },
-    renewable_kwh:   { factor: -0.82, unit: 'kWh',    label: 'Renewable Energy Credit' },
+    tree_planted:  { factor: -21.0, unit: 'tree', label: 'Tree Planted (annual)' },
+    renewable_kwh: { factor: -0.82, unit: 'kWh',  label: 'Renewable Energy Credit' },
   },
-};
+} as const;
+
+// ---------------------------------------------------------------------------
+// Derived types
+// ---------------------------------------------------------------------------
 
 export type Category = keyof typeof EMISSION_FACTORS;
-export type ActivityType<C extends Category> = keyof typeof EMISSION_FACTORS[C];
+export type ActivityType<C extends Category> = keyof (typeof EMISSION_FACTORS)[C];
 
+/** The shape of a single emission factor entry */
+export interface EmissionFactorEntry {
+  factor: number;
+  unit: string;
+  label: string;
+}
+
+// ---------------------------------------------------------------------------
+// Emission calculation
+// ---------------------------------------------------------------------------
+
+/**
+ * Calculates the carbon emission (in kg CO₂e) for a given activity.
+ *
+ * @param category     One of the top-level keys in `EMISSION_FACTORS`.
+ * @param activityType A sub-key within that category.
+ * @param quantity     Amount of the unit consumed (must be a positive number).
+ * @returns            Rounded kg CO₂e value, or `0` for unknown inputs.
+ *
+ * @example
+ *   calculateEmission('transport', 'car_petrol', 50)
+ *   // → 10.5  (50 km × 0.21 kg/km)
+ *
+ *   calculateEmission('offset', 'tree_planted', 2)
+ *   // → -42   (2 trees × -21 kg/tree — a negative offset)
+ */
 export function calculateEmission(
   category: string,
   activityType: string,
-  quantity: number
+  quantity: number,
 ): number {
   const cat = EMISSION_FACTORS[category as Category];
   if (!cat) return 0;
-  const activity = (cat as Record<string, { factor: number }>)[activityType];
-  if (!activity) return 0;
-  return Math.round(activity.factor * quantity * 100) / 100;
+
+  const entry = (cat as Record<string, EmissionFactorEntry>)[activityType];
+  if (!entry) return 0;
+
+  return Math.round(entry.factor * quantity * 100) / 100;
 }
 
-// India average: ~1.9 tonnes/year = ~5.2 kg/day
-// Global average: ~4.5 tonnes/year = ~12.3 kg/day
+/**
+ * Returns the `EmissionFactorEntry` for a given category + type pair, or
+ * `undefined` if the combination is not recognised.
+ *
+ * Prefer this over direct object indexing so callers don't need to cast.
+ */
+export function getEmissionFactor(
+  category: string,
+  activityType: string,
+): EmissionFactorEntry | undefined {
+  const cat = EMISSION_FACTORS[category as Category];
+  if (!cat) return undefined;
+  return (cat as Record<string, EmissionFactorEntry>)[activityType];
+}
+
+// ---------------------------------------------------------------------------
+// Benchmarks
+// ---------------------------------------------------------------------------
+
+/**
+ * Per-capita CO₂ benchmarks used for comparison charts and streak logic.
+ *
+ * - `india_daily` / `india_annual`: India average (~1.9 t/yr → ~5.2 kg/day)
+ * - `global_daily` / `global_annual`: World average (~4.5 t/yr → ~12.3 kg/day)
+ * - `paris_target_annual`: 2-tonne annual budget required for Paris 2 °C goal
+ */
 export const BENCHMARKS = {
-  india_daily:  5.2,
+  india_daily: 5.2,
   india_annual: 1900,
   global_daily: 12.3,
   global_annual: 4500,
-  paris_target_annual: 2000, // 2 tonnes target
-};
+  /** 2,000 kg/yr = 2 tonnes — the Paris Agreement 2 °C pathway target */
+  paris_target_annual: 2000,
+} as const;

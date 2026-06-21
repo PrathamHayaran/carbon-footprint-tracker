@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: 'standalone',  // Required for Docker / Cloud Run
+  // Note: 'output: standalone' removed — only needed for Docker/Cloud Run, not Vercel
   experimental: {
     optimizePackageImports: ['recharts', 'lucide-react'],
   },

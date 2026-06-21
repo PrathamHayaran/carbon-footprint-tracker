@@ -13,7 +13,7 @@ interface TrendChartProps {
 
 const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) => {
   if (active && payload && payload.length) {
-    const v = payload[0].value;
+    const v = payload[0]?.value ?? 0;
     const color = v < 5.2 ? '#4ade80' : v < 10 ? '#fb923c' : '#f87171';
     return (
       <div style={{
